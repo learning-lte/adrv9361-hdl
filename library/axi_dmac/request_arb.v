@@ -178,7 +178,10 @@ module dmac_request_arb #(
   output src_enabled,
 
   // Diagnostics interface
-  output  [7:0] dest_diag_level_bursts
+  output  [7:0] dest_diag_level_bursts,
+
+  // timing output modification
+  output out_src_last
 );
 
 localparam DMA_TYPE_MM_AXI = 0;
@@ -268,6 +271,10 @@ wire [ID_WIDTH-1:0] src_response_id;
 wire src_valid;
 wire [DMA_DATA_WIDTH_SRC-1:0] src_data;
 wire src_last;
+
+// timing modifications
+assign out_src_last = src_last;
+
 wire src_partial_burst;
 wire block_descr_to_dst;
 wire src_fifo_valid;

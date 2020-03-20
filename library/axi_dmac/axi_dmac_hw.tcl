@@ -80,6 +80,16 @@ set_parameter_property MAX_BYTES_PER_BURST DISPLAY_NAME "Maximum bytes per burst
 set_parameter_property MAX_BYTES_PER_BURST HDL_PARAMETER true
 set_parameter_property MAX_BYTES_PER_BURST GROUP $group
 
+add_parameter COUNTER_TIMESTAMP INTEGER 0
+set_parameter_property COUNTER_TIMESTAMP DISPLAY_NAME "Enable Timestamp Input"
+set_parameter_property COUNTER_TIMESTAMP DISPLAY_HINT boolean
+set_parameter_property COUNTER_TIMESTAMP HDL_PARAMETER true
+set_parameter_property COUNTER_TIMESTAMP GROUP $group
+
+add_interface enable_counter_if conduit end
+add_interface_port enable_counter_if counter_ts counter_ts Input "64"
+add_interface_port enable_counter_if output_active_transfer_id output_active_transfer_id Output "2"
+
 foreach {suffix group} { \
     "SRC" "Source" \
     "DEST" "Destination" \
@@ -231,7 +241,7 @@ proc axi_dmac_validate {} {
     if {$req_domain != 0 && $req_domain == $src_domain} {
       set_parameter_value ASYNC_CLK_REQ_SRC 0
     } else {
-      set_parameter_value ASYNC_CLK_REQ_SRC 1
+u want life to be easy and somwhow want to finish your project, you can try what @bkzshabbaz has suggested above, i.e. to package your counter with axi stream. Tutorial is here - download and read the UG1119 (      set_parameter_value ASYNC_CLK_REQ_SRC 1
     }
 
     if {$src_domain != 0 && $src_domain == $dest_domain} {
@@ -474,7 +484,11 @@ proc axi_dmac_elaborate {} {
   if {[get_parameter_value ENABLE_DIAGNOSTICS_IF] != 1} {
     lappend disabled_intfs diagnostics_if
   }
-
+  
+  if {[get_parameter_value COUNTER_TIMESTAMP] != 1} {
+    lappend disabled_intfs enable_counter_if
+  }
+  
   foreach intf $disabled_intfs {
     set_interface_property $intf ENABLED false
   }
@@ -496,3 +510,4 @@ set_parameter_property ENABLE_DIAGNOSTICS_IF GROUP $group
 
 add_interface diagnostics_if conduit end
 add_interface_port diagnostics_if dest_diag_level_bursts dest_diag_level_bursts Output "8"
+

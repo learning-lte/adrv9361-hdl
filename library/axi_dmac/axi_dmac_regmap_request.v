@@ -47,7 +47,9 @@ module axi_dmac_regmap_request #(
   parameter HAS_DEST_ADDR = 1,
   parameter HAS_SRC_ADDR = 1,
   parameter DMA_2D_TRANSFER = 0,
-  parameter SYNC_TRANSFER_START = 0
+  parameter SYNC_TRANSFER_START = 0,
+  parameter COUNTER_TIMESTAMP = 0,
+  parameter TRANSFER_TYPE = 2
 ) (
   input clk,
   input reset,
@@ -84,11 +86,30 @@ module axi_dmac_regmap_request #(
   input [BYTES_PER_BURST_WIDTH-1:0] response_measured_burst_length,
   input response_partial,
   input response_valid,
-  output reg response_ready = 1'b1
+  output reg response_ready = 1'b1,
 
+  // Counter Timestamp Modification
+  input [63:0] counter_ts,
+  input out_fifo_valid,
+  input out_src_last,
+  output [1:0] out_active_transfer_id
 );
 
 localparam MEASURED_LENGTH_WIDTH = (DMA_2D_TRANSFER == 1) ? 32 : DMA_LENGTH_WIDTH;
+
+//Counter Timestamp reg
+reg [63:0] counter_ts_rx = 64'b0;
+reg [63:0] counter_ts_tx = 64'b0;
+
+reg [63:0] counter_ts_rx0 = 64'b0;
+reg [63:0] counter_ts_rx1 = 64'b0;
+reg [63:0] counter_ts_rx2 = 64'b0;
+reg [63:0] counter_ts_rx3 = 64'b0;
+
+reg [63:0] counter_ts_tx0 = 64'b0;
+reg [63:0] counter_ts_tx1 = 64'b0;
+reg [63:0] counter_ts_tx2 = 64'b0;
+reg [63:0] counter_ts_tx3 = 64'b0;
 
 // DMA transfer signals
 reg up_dma_req_valid = 1'b0;
@@ -118,6 +139,10 @@ reg up_clear_tl = 1'b0;
 reg [1:0] up_transfer_id_eot_d = 'h0;
 wire up_bl_partial;
 
+// timing modification
+assign out_active_transfer_id = up_transfer_id_eot;
+reg [63:0] eot_timestamp = 64'h0;
+
 assign request_dest_address = up_dma_dest_address;
 assign request_src_address = up_dma_src_address;
 assign request_x_length = up_dma_x_length;
@@ -135,7 +160,7 @@ always @(posedge clk) begin
     up_dma_enable_tlen_reporting <= 1'b0;
   end else begin
     if (ctrl_enable == 1'b1) begin
-      if (up_wreq == 1'b1 && up_waddr == 9'h102) begin
+      if (up_wreq == 1'b1 && up_waddr == 9'h102) begin 		//AXI_DMAC_REG_START_TRANSFER
         up_dma_req_valid <= up_dma_req_valid | up_wdata[0];
       end else if (up_sot == 1'b1) begin
         up_dma_req_valid <= 1'b0;
@@ -176,9 +201,64 @@ always @(*) begin
   9'h112: up_rdata <= up_measured_transfer_length;
   9'h113: up_rdata <= up_tlf_data[MEASURED_LENGTH_WIDTH-1 : 0];   // Length
   9'h114: up_rdata <= up_tlf_data[MEASURED_LENGTH_WIDTH+: 2];  // ID
+  9'h115: up_rdata <= (TRANSFER_TYPE == 2) ? counter_ts_rx[31:0]  : counter_ts_tx[31:0];   // Read Time Stamp LSB (addr: 454 in the driver)
+  9'h116: up_rdata <= (TRANSFER_TYPE == 2) ? counter_ts_rx[63:32] : counter_ts_tx[63:32];  // Read Time Stamp MSB (addr: 458 in the driver)
+  // CAUTION: 117 and 118 does not work! gives always zero!
   default: up_rdata <= 32'h00;
   endcase
 end
+
+// Counter Timestamp Sequential Part ADC (RX)
+generate
+if (COUNTER_TIMESTAMP == 1 && TRANSFER_TYPE == 2) begin
+  always @(posedge out_src_last) begin
+    case(up_transfer_id_eot)
+    2'b00: begin 
+      counter_ts_rx0 <= counter_ts;
+    end
+    2'b01: begin 
+      counter_ts_rx1 <= counter_ts;
+    end
+    2'b10: begin 
+      counter_ts_rx2 <= counter_ts;
+    end
+    2'b11: begin 
+      counter_ts_rx3 <= counter_ts;
+    end
+    endcase
+  end
+end
+endgenerate
+
+// Counter Timestamp Diff Calculation (TX)
+generate
+if (COUNTER_TIMESTAMP == 1 && TRANSFER_TYPE ==1) begin
+  always @(posedge out_fifo_valid) begin
+    case(up_transfer_id_eot)
+    2'b00: begin
+      if (counter_ts_tx0 <= eot_timestamp) begin
+        counter_ts_tx0 <= counter_ts;
+      end
+    end
+    2'b01: begin 
+      if (counter_ts_tx1 <= eot_timestamp) begin
+        counter_ts_tx1 <= counter_ts;
+      end
+    end
+    2'b10: begin 
+      if (counter_ts_tx2 <= eot_timestamp) begin
+        counter_ts_tx2 <= counter_ts;
+      end
+    end
+    2'b11: begin
+      if (counter_ts_tx3 <= eot_timestamp) begin
+        counter_ts_tx3 <= counter_ts;
+      end
+    end
+    endcase
+  end
+end
+endgenerate
 
 generate
 if (DMA_2D_TRANSFER == 1) begin
@@ -213,6 +293,7 @@ endgenerate
 assign up_sot = up_dma_cyclic ? 1'b0 : up_dma_req_valid & up_dma_req_ready;
 assign up_eot = up_dma_cyclic ? 1'b0 : response_eot & response_valid & response_ready;
 
+//assign request_valid = up_dma_req_valid;
 assign request_valid = up_dma_req_valid;
 assign up_dma_req_ready = request_ready;
 
@@ -223,6 +304,7 @@ always @(posedge clk) begin
     up_transfer_id_eot <= 2'h0;
     up_transfer_done_bitmap <= 4'h0;
   end else begin
+
     if (up_sot == 1'b1) begin
       up_transfer_id <= up_transfer_id + 1'b1;
       up_transfer_done_bitmap[up_transfer_id] <= 1'b0;
@@ -231,7 +313,23 @@ always @(posedge clk) begin
     if (up_eot == 1'b1) begin
       up_transfer_id_eot <= up_transfer_id_eot + 1'b1;
       up_transfer_done_bitmap[up_transfer_id_eot] <= 1'b1;
+      eot_timestamp <= counter_ts;
+      case(up_transfer_id_eot)
+    	2'b00: counter_ts_rx <= counter_ts_rx0;
+    	2'b01: counter_ts_rx <= counter_ts_rx1;
+    	2'b10: counter_ts_rx <= counter_ts_rx2;
+    	2'b11: counter_ts_rx <= counter_ts_rx3;
+        default: counter_ts_rx <= 0;
+      endcase
+      case(up_transfer_id_eot)
+    	2'b00: counter_ts_tx <= counter_ts_tx0;
+    	2'b01: counter_ts_tx <= counter_ts_tx1;
+    	2'b10: counter_ts_tx <= counter_ts_tx2;
+    	2'b11: counter_ts_tx <= counter_ts_tx3;
+        default: counter_ts_tx <= 0;
+      endcase
     end
+
   end
 end
 

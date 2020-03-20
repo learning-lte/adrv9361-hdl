@@ -59,10 +59,12 @@ module axi_dmac #(
   parameter AXI_ID_WIDTH_SRC = 1,
   parameter AXI_ID_WIDTH_DEST = 1,
   parameter DISABLE_DEBUG_REGISTERS = 0,
-  parameter ENABLE_DIAGNOSTICS_IF = 0)(
+  parameter ENABLE_DIAGNOSTICS_IF = 0,
+  parameter COUNTER_TIMESTAMP = 0)(
   // Slave AXI interface
   input s_axi_aclk,
   input s_axi_aresetn,
+
 
   input         s_axi_awvalid,
   input  [11:0] s_axi_awaddr,
@@ -217,9 +219,18 @@ module axi_dmac #(
   output                                   fifo_rd_xfer_req,
 
   // Diagnostics interface
-  output  [7:0] dest_diag_level_bursts
+  output  [7:0] dest_diag_level_bursts,
+
+  // Counter Timestamp input
+  input  [63:0] counter_ts,
+  output [1:0] out_active_transfer_id
 );
 
+// Counter Timestamp localparams, final param: TRANSFER_TYPE. it is
+// matched with the DIR tag in the driver
+localparam TYPE_ADC = ((DMA_TYPE_DEST == 0) && (DMA_TYPE_SRC == 2));
+localparam TYPE_DAC = ((DMA_TYPE_DEST == 2) && (DMA_TYPE_SRC == 0));
+localparam TRANSFER_TYPE = (TYPE_ADC ? 2 : ( TYPE_DAC ? 1 : 0));
 
 localparam DMA_TYPE_AXI_MM = 0;
 localparam DMA_TYPE_AXI_STREAM = 1;
@@ -313,6 +324,9 @@ wire [11:0] dbg_status;
 wire [31:0] dbg_ids0;
 wire [31:0] dbg_ids1;
 
+// timing modifications
+assign out_dest_data_id = dest_data_id;
+
 assign m_dest_axi_araddr = 'd0;
 assign m_dest_axi_arlen = 'd0;
 assign m_dest_axi_arsize = 'd0;
@@ -359,6 +373,8 @@ wire [DMA_LENGTH_WIDTH-1:0] up_dma_req_src_stride;
 wire up_dma_req_sync_transfer_start;
 wire up_dma_req_last;
 
+wire timing_src_last;
+
 assign dbg_ids0 = {
   {DBG_ID_PADDING{1'b0}}, dest_response_id,
   {DBG_ID_PADDING{1'b0}}, dest_data_id,
@@ -385,7 +401,9 @@ axi_dmac_regmap #(
   .HAS_DEST_ADDR(HAS_DEST_ADDR),
   .HAS_SRC_ADDR(HAS_SRC_ADDR),
   .DMA_2D_TRANSFER(DMA_2D_TRANSFER),
-  .SYNC_TRANSFER_START(SYNC_TRANSFER_START)
+  .SYNC_TRANSFER_START(SYNC_TRANSFER_START),
+  .COUNTER_TIMESTAMP(COUNTER_TIMESTAMP),
+  .TRANSFER_TYPE(TRANSFER_TYPE)
 ) i_regmap (
   .s_axi_aclk(s_axi_aclk),
   .s_axi_aresetn(s_axi_aresetn),
@@ -441,7 +459,13 @@ axi_dmac_regmap #(
   .dbg_src_addr(m_src_axi_araddr),
   .dbg_status(dbg_status),
   .dbg_ids0(dbg_ids0),
-  .dbg_ids1(dbg_ids1)
+  .dbg_ids1(dbg_ids1),
+
+  // Counter timestamp
+  .counter_ts(counter_ts),
+  .out_fifo_valid(fifo_rd_valid),
+  .out_src_last(timing_src_last),
+  .out_active_transfer_id(out_active_transfer_id)
 );
 
 axi_dmac_transfer #(
@@ -569,7 +593,10 @@ axi_dmac_transfer #(
   .dbg_src_response_id(src_response_id),
   .dbg_status(dbg_status),
 
-  .dest_diag_level_bursts(dest_diag_level_bursts)
+  .dest_diag_level_bursts(dest_diag_level_bursts),
+
+  // Timing Modifications
+  .out_src_last(timing_src_last)
 );
 
 assign m_dest_axi_arvalid = 1'b0;

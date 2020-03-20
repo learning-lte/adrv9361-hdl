@@ -82,6 +82,10 @@ adi_set_ports_dependency "fifo_rd" \
 	"(spirit:decode(id('MODELPARAM_VALUE.DMA_TYPE_DEST')) = 2)"
 adi_set_ports_dependency "dest_diag_level_bursts" \
 	"(spirit:decode(id('MODELPARAM_VALUE.ENABLE_DIAGNOSTICS_IF')) = 1)"
+adi_set_ports_dependency "counter_ts" \
+	"(spirit:decode(id('MODELPARAM_VALUE.COUNTER_TIMESTAMP')) = 1)"
+adi_set_ports_dependency "out_active_transfer_id" \
+	"(spirit:decode(id('MODELPARAM_VALUE.COUNTER_TIMESTAMP')) = 1)"
 
 # These are in the design to keep the Altera tools happy which can't handle
 # uni-directional AXI interfaces. The Xilinx tools can and do a better job when
@@ -222,6 +226,7 @@ foreach {k v} { \
 		"CYCLIC" "false" \
 		"DMA_2D_TRANSFER" "false" \
 		"SYNC_TRANSFER_START" "false" \
+		"COUNTER_TIMESTAMP" "false" \
 		"AXI_SLICE_SRC" "false" \
 		"AXI_SLICE_DEST" "false" \
 		"DISABLE_DEBUG_REGISTERS" "false" \
@@ -338,6 +343,12 @@ set p [ipgui::get_guiparamspec -name "MAX_BYTES_PER_BURST" -component $cc]
 ipgui::move_param -component $cc -order 3 $p -parent $general_group
 set_property -dict [list \
 	"display_name" "Maximum Bytes per Burst" \
+] $p
+
+set p [ipgui::get_guiparamspec -name "COUNTER_TIMESTAMP" -component $cc]
+ipgui::move_param -component $cc -order 4 $p -parent $general_group
+set_property -dict [list \
+	"display_name" "Enable Timestamp Input" \
 ] $p
 
 set feature_group [ipgui::add_group -name "Features" -component $cc \
