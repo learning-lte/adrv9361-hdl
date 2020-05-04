@@ -1,7 +1,7 @@
 //Copyright 1986-2018 Xilinx, Inc. All Rights Reserved.
 //--------------------------------------------------------------------------------
 //Tool Version: Vivado v.2018.2 (lin64) Build 2258646 Thu Jun 14 20:02:38 MDT 2018
-//Date        : Tue Mar 17 18:21:53 2020
+//Date        : Wed Mar 18 15:48:26 2020
 //Host        : warplab4 running 64-bit Ubuntu 18.04.2 LTS
 //Command     : generate_target system.bd
 //Design      : system
@@ -4406,6 +4406,7 @@ module system
   wire [0:0]util_vector_logic_0_Res;
   wire [0:0]util_vector_logic_1_Res;
   wire [0:0]util_vector_logic_2_Res;
+  wire [0:0]util_vector_logic_3_Res;
   wire [0:0]util_vector_logic_4_Res;
   wire [0:0]util_vector_logic_5_Res;
   wire [0:0]util_vector_logic_6_Res;
@@ -4655,7 +4656,7 @@ module system
        (.counter_ts(c_counter_binary_0_Q),
         .fifo_rd_clk(util_ad9361_divclk_clk_out),
         .fifo_rd_dout(axi_ad9361_dac_dma_fifo_rd_dout),
-        .fifo_rd_en(util_ad9361_dac_upack_dac_valid),
+        .fifo_rd_en(util_vector_logic_3_Res),
         .irq(axi_ad9361_dac_dma_irq),
         .m_src_axi_aclk(sys_cpu_clk),
         .m_src_axi_araddr(S00_AXI_3_ARADDR),
@@ -6064,7 +6065,7 @@ module system
         .sync_mode(axi_ad9361_tdd_sync_cntr),
         .sync_out(util_ad9361_tdd_sync_sync_out));
   system_util_vector_logic_0_0 util_vector_logic_0
-       (.Op1(1'b0),
+       (.Op1(util_ad9361_dac_upack_dac_valid),
         .Op2(s_demux_0_Res),
         .Res(util_vector_logic_0_Res));
   system_util_vector_logic_1_2 util_vector_logic_1
@@ -6076,7 +6077,8 @@ module system
         .Res(util_vector_logic_2_Res));
   system_util_vector_logic_0_1 util_vector_logic_3
        (.Op1(util_vector_logic_0_Res),
-        .Op2(s_demux_1_Res));
+        .Op2(s_demux_1_Res),
+        .Res(util_vector_logic_3_Res));
   system_util_vector_logic_2_0 util_vector_logic_4
        (.Op1(xlslice_4_Dout),
         .Op2(xlslice_3_Dout),
